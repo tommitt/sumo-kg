@@ -1,0 +1,4 @@
+*.pyc
+.scratchpad/
+.vscode/
+.env
