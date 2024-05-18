@@ -11,12 +11,30 @@ def get_llm(model: str = "gpt-3.5-turbo", temperature: float = 0.0) -> BaseChatM
     return ChatOpenAI(model=model, temperature=temperature)
 
 
+class GraphOutputParser(PydanticOutputParser):
+    def get_format_instructions(self) -> str:
+        return (
+            "Format your output as a json with the following schema. "
+            "Do not add any other comment before or after the json. "
+            "Respond ONLY with a well formed json that can be directly read by a program.\n\n"
+            "{\n"
+            "   edges: [\n"
+            "      {\n"
+            '         node_1: Required, an entity object with attributes: {"label": "as per the ontology", "name": "Name of the entity"},\n'
+            '         node_2: Required, an entity object with attributes: {"label": "as per the ontology", "name": "Name of the entity"},\n'
+            "         relationship: Describe the relationship between node_1 and node_2 as per the context, in a few sentences.\n"
+            "      },\n"
+            "   ]\n"
+            "}\n"
+        )
+
+
 def get_extraction_chain() -> RunnableSerializable:
     llm = get_llm()
 
-    parser = PydanticOutputParser(pydantic_object=Graph)
+    parser = GraphOutputParser(pydantic_object=Graph)
 
-    EXTRACTION_SYSTEM_PROMPT = (
+    _EXTRACTION_SYSTEM_PROMPT = (
         "You are an expert at creating knowledge graphs. "
         "Consider the following ontology:\n\n{ontology}\n\n"
         "The user will provide you with an input text. "
@@ -29,7 +47,7 @@ def get_extraction_chain() -> RunnableSerializable:
         [
             (
                 "system",
-                EXTRACTION_SYSTEM_PROMPT + "\n{format_instructions}",
+                _EXTRACTION_SYSTEM_PROMPT + "\n{format_instructions}",
             ),
             ("human", "{text}"),
         ]
