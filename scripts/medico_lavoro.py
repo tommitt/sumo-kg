@@ -1,21 +1,16 @@
-from dotenv import load_dotenv
-
-load_dotenv()
 import pickle
 
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-from sumo.kg import create_kg
+from sumo.agent import LlmAgent
 from sumo.schemas import Ontology
 
 # inputs
 ontology_labels = [
-    "Persone Fisiche",
-    "Soggetti Aziendali - Organizzazioni",
-    "Documenti",
+    {"Persona": "Persone fisiche"},
+    {"Azienda": "Soggetti aziendali e organizzazioni"},
+    "Documento",
     "Attività",
     "Software",
-    "Azioni",
+    "Altro",
 ]
 ontology_relationships = ["Relation between any pair of entities"]
 
@@ -62,19 +57,12 @@ Quando in ultimo il dottore è assegnato, egli svolge le visite.
 Le visite, in combinazione con i referti effettuati dagli infermieri, sono necessari per la preparazione delle idoneità.\
 """
 
-# text splitter
-text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-    model_name="gpt-3.5-turbo",
-    chunk_size=800,
-    chunk_overlap=0,
-)
-texts = text_splitter.split_text(full_text)
-
 # create kg
 ontology = Ontology(labels=ontology_labels, relationships=ontology_relationships)
-graph = create_kg(texts, ontology)
+agent = LlmAgent(ontology)
+agent_state = agent.run(full_text)
 
 # save graph
 out_filename = ".scratchpad/outputs/graph.pkl"
 with open(out_filename, "wb") as f:
-    pickle.dump(graph, f)
+    pickle.dump(agent_state["kg"], f)
