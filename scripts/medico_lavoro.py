@@ -59,7 +59,7 @@ Le visite, in combinazione con i referti effettuati dagli infermieri, sono neces
 
 # create kg
 ontology = Ontology(labels=ontology_labels, relationships=ontology_relationships)
-agent = LlmAgent(ontology)
+agent = LlmAgent(ontology=ontology)
 agent_state = agent.run(full_text)
 
 # save graph

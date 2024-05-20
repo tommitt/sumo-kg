@@ -59,8 +59,13 @@ def direct_llm_node(state: AgentState) -> AgentState:
 
 
 class LlmAgent:
-    def __init__(self, ontology: Ontology) -> None:
+    def __init__(
+        self,
+        ontology: Ontology = Ontology(labels=[], relationships=[]),
+        kg: Graph = Graph(edges=[]),
+    ) -> None:
         self._ontology = ontology
+        self._kg = kg
         self.graph = self._compile()
 
     def _compile(self) -> CompiledGraph:
@@ -85,6 +90,6 @@ class LlmAgent:
 
     def run(self, query: str) -> AgentState:
         state = self.graph.invoke(
-            {"query": query, "ontology": str(self._ontology.dump())}
+            {"query": query, "ontology": str(self._ontology.dump()), "kg": self._kg}
         )
         return state

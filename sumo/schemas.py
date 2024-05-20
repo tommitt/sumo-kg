@@ -81,6 +81,8 @@ class Graph(BaseModel):
         return df_nodes, df_edges
 
     def to_html(self) -> str:
+        if len(self.edges) == 0:
+            return ""
 
         df_nodes, df_edges = self.to_pandas()
 
