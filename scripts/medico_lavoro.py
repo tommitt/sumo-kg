@@ -1,7 +1,10 @@
+import logging
 import pickle
 
 from sumo.agent import LlmAgent
 from sumo.schemas import Ontology
+
+logging.basicConfig(level=logging.INFO)
 
 # inputs
 ontology_labels = [
@@ -61,8 +64,16 @@ Le visite, in combinazione con i referti effettuati dagli infermieri, sono neces
 ontology = Ontology(labels=ontology_labels, relationships=ontology_relationships)
 agent = LlmAgent(ontology=ontology)
 agent_state = agent.run(full_text)
+kg = agent_state["kg"]
 
 # save graph
-out_filename = ".scratchpad/outputs/graph.pkl"
-with open(out_filename, "wb") as f:
-    pickle.dump(agent_state["kg"], f)
+out_name = "graph"
+out_filepath = ".scratchpad/outputs/"
+
+out_pkl_filename = f"{out_filepath}{out_name}.pkl"
+with open(out_pkl_filename, "wb") as f:
+    pickle.dump(kg, f)
+
+out_html_filename = f"{out_filepath}{out_name}.html"
+with open(out_html_filename, "w") as f:
+    f.write(kg.to_html())

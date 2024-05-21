@@ -43,6 +43,12 @@ class Graph(BaseModel):
         if len(graph.edges) > 0:
             self.edges += graph.edges
 
+    def get_nodes_list(self) -> list[str]:
+        nodes = []
+        for ed in self.edges:
+            nodes.extend([ed.node_1.name, ed.node_2.name])
+        return list(set(nodes))
+
     def to_pandas(self) -> tuple[pd.DataFrame, pd.DataFrame]:
         nodes, edges = [], []
         for ed in self.edges:

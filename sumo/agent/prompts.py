@@ -11,7 +11,8 @@ GENERATE_KG_SYSTEM_PROMPT = (
     "Extract all the entities and relationships from the user-provided text as per the given ontology. "
     "Do not use any previous knowledge about the context. "
     "Remember there can be multiple direct (explicit) or implied relationships between the same pair of nodes. "
-    "Be consistent with the given ontology. Use ONLY the labels and relationships mentioned in the ontology."
+    "Be consistent with the given ontology. Use ONLY the labels and relationships mentioned in the ontology. "
+    "When generating the graph, consider the following already created entities:\n{nodes}"
 )
 
 GRAPH_FORMAT_INSTRUCTIONS = (

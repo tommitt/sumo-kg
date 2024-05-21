@@ -1,19 +1,20 @@
 import logging
-from typing import Literal
+from typing import Literal, TypedDict
 
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
-from typing_extensions import TypedDict
 
 from sumo.agent.llms import direct_llm, generate_kg_llm, router_llm
 from sumo.schemas import Graph, Ontology
+from sumo.settings import config
 
 logger = logging.getLogger("llm")
 
 
 class AgentState(TypedDict):
     query: str
-    ontology: str
+    ontology: Ontology
     kg: Graph
     generation: str
 
@@ -39,11 +40,19 @@ def generate_kg_node(state: AgentState) -> AgentState:
     logger.info("---GENERATE KG---")
     query = state["query"]
     ontology = state["ontology"]
+    kg = state["kg"]
 
     llm = generate_kg_llm()
-    kg = llm.invoke({"query": query, "ontology": ontology})
+    new_kg = llm.invoke(
+        {
+            "query": query,
+            "ontology": str(ontology.dump()),
+            "nodes": kg.get_nodes_list(),
+        }
+    )
+    kg.merge_edges(new_kg)
 
-    logger.info(f"Query: {query}\nKG: {kg}\n")
+    logger.info(f"Query: {query}\nGenerated KG: {new_kg}\n")
     return AgentState(kg=kg, generation=_TEMPLATE_GENERATION)
 
 
@@ -89,7 +98,17 @@ class LlmAgent:
         return graph.compile()
 
     def run(self, query: str) -> AgentState:
-        state = self.graph.invoke(
-            {"query": query, "ontology": str(self._ontology.dump()), "kg": self._kg}
+        text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            model_name=config.OPENAI_CHAT_MODEL,
+            chunk_size=config.CHUNK_TOKENS_LIMIT,
+            chunk_overlap=0,
         )
+        queries = text_splitter.split_text(query)
+
+        for i, q in enumerate(queries):
+            logger.info(f"Executing agent for query {i+1}/{len(queries)}")
+            state = self.graph.invoke(
+                {"query": q, "ontology": self._ontology, "kg": self._kg},
+                config={"recursion_limit": config.AGENT_STEPS_LIMIT},
+            )
         return state
