@@ -6,13 +6,15 @@ ROUTER_SYSTEM_PROMPT = (
 
 GENERATE_KG_SYSTEM_PROMPT = (
     "You are an expert at creating knowledge graphs. "
-    "Consider the following ontology:\n\n{ontology}\n\n"
+    "Consider the following ontology:\n{ontology}\n\n"
     "The user will provide you with an input text. "
     "Extract all the entities and relationships from the user-provided text as per the given ontology. "
     "Do not use any previous knowledge about the context. "
     "Remember there can be multiple direct (explicit) or implied relationships between the same pair of nodes. "
-    "Be consistent with the given ontology. Use ONLY the labels and relationships mentioned in the ontology. "
-    "When generating the graph, consider the following already created entities:\n{nodes}"
+    "Be consistent with the given ontology. Use ONLY the labels and relationships mentioned in the ontology.\n"
+    "At priors iterations, you have created the following entities:\n{nodes}\n\n"
+    "You have the ability to explore the already created relationships of a given entity. "
+    "These are the relationships you explored:\n{explorations}"
 )
 
 GRAPH_FORMAT_INSTRUCTIONS = (

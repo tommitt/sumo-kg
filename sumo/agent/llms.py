@@ -1,8 +1,10 @@
-from typing import Literal
+from typing import Literal, Union
 
 from langchain.output_parsers import PydanticOutputParser
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.outputs import ChatGeneration
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableSerializable
 from langchain_openai import ChatOpenAI
@@ -51,13 +53,29 @@ class GraphOutputParser(PydanticOutputParser):
     def get_format_instructions(self) -> str:
         return GRAPH_FORMAT_INSTRUCTIONS
 
+    def parse_result(
+        self, result: list[ChatGeneration]
+    ) -> Union[AIMessage, "GraphOutputParser"]:
+        """
+        Custom parser that accepts both a tool call or a pydantic-json output
+
+        Args:
+            result (list[ChatGeneration]): a list with one item, the generated response
+
+        Returns:
+            AIMessage if the result returned a tool call, the pydantic object otherwise
+        """
+        if "tool_calls" in result[0].message.additional_kwargs:
+            return result[0].message
+        return super().parse_result(result)
+
 
 def generate_kg_llm() -> RunnableSerializable:
     llm = get_llm()
     parser = GraphOutputParser(pydantic_object=Graph)
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", GENERATE_KG_SYSTEM_PROMPT + "\n{format_instructions}"),
+            ("system", GENERATE_KG_SYSTEM_PROMPT + "\n\n{format_instructions}"),
             ("human", "{query}"),
         ]
     ).partial(format_instructions=parser.get_format_instructions())

@@ -6,6 +6,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
 
 from sumo.agent.llms import direct_llm, generate_kg_llm, router_llm
+from sumo.agent.tools import explore_kg_tool
 from sumo.schemas import Graph, Ontology
 from sumo.settings import config
 
@@ -16,10 +17,12 @@ class AgentState(TypedDict):
     query: str
     ontology: Ontology
     kg: Graph
+    tool_calls: list[dict]
+    explorations: list[str]
     generation: str
 
 
-def router_edge(state: AgentState) -> Literal["generate_kg", "direct_llm"]:
+def input_router_edge(state: AgentState) -> Literal["generate_kg", "direct_llm"]:
     logger.info("---ROUTER---")
     query = state["query"]
 
@@ -34,6 +37,14 @@ def router_edge(state: AgentState) -> Literal["generate_kg", "direct_llm"]:
         raise Exception(f"Router source {source} is not supported")
 
 
+def tool_router_edge(state: AgentState) -> Literal["call_tool", "__end__"]:
+    tool_calls = state["tool_calls"]
+
+    if tool_calls:
+        return "call_tool"
+    return "__end__"
+
+
 def generate_kg_node(state: AgentState) -> AgentState:
     _TEMPLATE_GENERATION = "KG correctly generated"
 
@@ -41,19 +52,25 @@ def generate_kg_node(state: AgentState) -> AgentState:
     query = state["query"]
     ontology = state["ontology"]
     kg = state["kg"]
+    explorations = state["explorations"]
 
     llm = generate_kg_llm()
-    new_kg = llm.invoke(
+    output = llm.invoke(
         {
             "query": query,
             "ontology": str(ontology.dump()),
             "nodes": kg.get_nodes_list(),
+            "explorations": explorations,
         }
     )
-    kg.merge_edges(new_kg)
 
-    logger.info(f"Query: {query}\nGenerated KG: {new_kg}\n")
-    return AgentState(kg=kg, generation=_TEMPLATE_GENERATION)
+    if isinstance(output, Graph):
+        kg.merge_edges(output)
+        logger.info(f"Query: {query}\nGenerated KG: {output}\n")
+        return AgentState(kg=kg, generation=_TEMPLATE_GENERATION, tool_calls=[])
+
+    logger.info(f"Query: {query}\nTool calling: {output.tool_calls}")
+    return AgentState(tool_calls=output.tool_calls)
 
 
 def direct_llm_node(state: AgentState) -> AgentState:
@@ -65,6 +82,17 @@ def direct_llm_node(state: AgentState) -> AgentState:
 
     logger.info(f"Query: {query}\nAnswer: {generation}\n")
     return AgentState(generation=generation)
+
+
+def explore_kg_tool_node(state: AgentState) -> AgentState:
+    tool_calls = state["tool_calls"]
+
+    explorations = []
+    for call in tool_calls:
+        result = explore_kg_tool(**call["args"])
+        explorations.append(result)
+
+    return AgentState(tool_calls=[], explorations=explorations)
 
 
 class LlmAgent:
@@ -83,16 +111,22 @@ class LlmAgent:
         # nodes
         graph.add_node("generate_kg", generate_kg_node)
         graph.add_node("direct_llm", direct_llm_node)
+        graph.add_node("explore_kg_tool", explore_kg_tool_node)
 
         # edges
         graph.set_conditional_entry_point(
-            router_edge,
+            input_router_edge,
             {
                 "generate_kg": "generate_kg",
                 "direct_llm": "direct_llm",
             },
         )
-        graph.add_edge("generate_kg", END)
+        graph.add_conditional_edges(
+            "generate_kg",
+            tool_router_edge,
+            {"call_tool": "explore_kg_tool", "__end__": END},
+        )
+        graph.add_edge("explore_kg_tool", "generate_kg")
         graph.add_edge("direct_llm", END)
 
         return graph.compile()
@@ -108,7 +142,12 @@ class LlmAgent:
         for i, q in enumerate(queries):
             logger.info(f"Executing agent for query {i+1}/{len(queries)}")
             state = self.graph.invoke(
-                {"query": q, "ontology": self._ontology, "kg": self._kg},
+                {
+                    "query": q,
+                    "ontology": self._ontology,
+                    "kg": self._kg,
+                    "explorations": [],
+                },
                 config={"recursion_limit": config.AGENT_STEPS_LIMIT},
             )
         return state
