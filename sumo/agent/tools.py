@@ -12,9 +12,8 @@ class ExploreKgTool:
     def __init__(self, kg: Graph) -> None:
         self._kg = kg
 
-    def explore_kg_tool(self, name: str) -> str:
-        # TODO: retrieve relationships from kg
-        return name
+    def run(self, name: str) -> str:
+        return self._kg.get_node_relationships(name)
 
 
 def get_explore_kg_tool(kg: Graph):
@@ -22,6 +21,6 @@ def get_explore_kg_tool(kg: Graph):
         name="explore_kg_tool",
         description="Explore all the relationships of a single node of the knowledge graph",
         args_schema=ExploreKgToolInput,
-        func=ExploreKgTool(kg=kg).explore_kg_tool,
+        func=ExploreKgTool(kg=kg).run,
         return_direct=False,
     )
