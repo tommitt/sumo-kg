@@ -6,7 +6,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
 
 from sumo.agent.llms import direct_llm, generate_kg_llm, router_llm
-from sumo.agent.tools import explore_kg_tool
+from sumo.agent.tools import get_explore_kg_tool
 from sumo.schemas import Graph, Ontology
 from sumo.settings import config
 
@@ -86,10 +86,12 @@ def direct_llm_node(state: AgentState) -> AgentState:
 
 def explore_kg_tool_node(state: AgentState) -> AgentState:
     tool_calls = state["tool_calls"]
+    kg = state["kg"]
 
     explorations = []
+    explore_kg_tool = get_explore_kg_tool(kg)
     for call in tool_calls:
-        result = explore_kg_tool(**call["args"])
+        result = explore_kg_tool.invoke(call["args"])
         explorations.append(result)
 
     return AgentState(tool_calls=[], explorations=explorations)
