@@ -1,9 +1,12 @@
+import logging
+
 import streamlit as st
 import streamlit.components.v1 as components
 
 from sumo.agent import LlmAgent
 from sumo.schemas import Graph, Ontology
 
+logging.basicConfig(level=logging.INFO)
 st.set_page_config(layout="wide")
 
 
@@ -39,7 +42,9 @@ def st_modifiable_list(name: str, options: list) -> None:
     )
 
 
-def st_chat_containers(subtitle_left: str, subtitle_right: str, height: int) -> tuple:
+def st_chat_containers(
+    subtitle_left: str, subtitle_right: str, height: int, html: str | None = None
+) -> tuple:
     col_left, col_right = st.columns(2)
 
     with col_left:
@@ -50,6 +55,8 @@ def st_chat_containers(subtitle_left: str, subtitle_right: str, height: int) -> 
     with col_right:
         st.subheader(subtitle_right)
         container_right = st.container(height=height)
+        if html:
+            st.download_button("Download HTML", html, "graph.html")
 
     return container_left, container_right, chat_input
 
@@ -62,8 +69,9 @@ with st.sidebar:
     st_modifiable_list("Relationships", st.session_state["ontology_relationships"])
 
 _CONTAINER_HEIGHT = 450
+kg_html = st.session_state["graph"].to_html()
 left, right, user_query = st_chat_containers(
-    "Chat interface", "Graph display", _CONTAINER_HEIGHT
+    "Chat interface", "Graph display", _CONTAINER_HEIGHT, kg_html
 )
 
 with left:
@@ -82,14 +90,15 @@ with left:
                 kg=st.session_state["graph"],
             )
             agent_state = agent.run(user_query)
-            st.chat_message("ai").markdown(agent_state["generation"])
+
+            st.session_state["messages"] += [
+                ("human", user_query),
+                ("ai", agent_state["generation"]),
+            ]
             if "kg" in agent_state:
                 st.session_state["graph"] = agent_state["kg"]
 
-        st.session_state["messages"] += [
-            ("human", user_query),
-            ("ai", agent_state["generation"]),
-        ]
+            st.rerun()
 
 with right:
-    components.html(st.session_state["graph"].to_html(), height=_CONTAINER_HEIGHT - 40)
+    components.html(kg_html, height=_CONTAINER_HEIGHT - 30)
