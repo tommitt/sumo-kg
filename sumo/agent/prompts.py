@@ -13,8 +13,9 @@ GENERATE_KG_SYSTEM_PROMPT = (
     "Remember there can be multiple direct (explicit) or implied relationships between the same pair of nodes. "
     "Be consistent with the given ontology. Use ONLY the labels and relationships mentioned in the ontology.\n"
     "At priors iterations, you have created the following entities:\n{nodes}\n\n"
-    "You have the ability to explore the already created relationships of a given entity. "
-    "These are the relationships you explored:\n{explorations}"
+    "You have the ability to explore the relationships of the created entities. "
+    "Explore an entity only if strictly necessary, otherwise generate the kg. "
+    "These are the relationships you have already explored:\n{explorations}"
 )
 
 GRAPH_FORMAT_INSTRUCTIONS = (

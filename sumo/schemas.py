@@ -49,24 +49,28 @@ class Graph(BaseModel):
             nodes.extend([edge.node_1.name, edge.node_2.name])
 
         if len(nodes) == 0:
-            return ["The graph is empty"]
+            return ["The graph is empty, no nodes have been created yet"]
         return list(set(nodes))
 
-    def get_node_relationships(self, name: str) -> list[str]:
+    def get_node_relationships(self, name: str) -> dict[str, list[str]]:
         relationships = []
+        template = 'with node "{other_node}": {relationship}'
         for edge in self.edges:
             if (edge.node_1.name == name) or (edge.node_2.name == name):
                 relationships.append(
-                    (
-                        f"{edge.node_1.name} ({edge.node_1.label}) - "
-                        f"{edge.node_2.name} ({edge.node_2.label}) -> "
-                        f"{edge.relationship}"
+                    template.format(
+                        other_node=(
+                            edge.node_2.name
+                            if edge.node_1.name == name
+                            else edge.node_1.name
+                        ),
+                        relationship=edge.relationship,
                     )
                 )
 
         if len(relationships) == 0:
-            return [f'Node "{name}" is not present in the graph']
-        return relationships
+            relationships = [f'Node "{name}" has no active relationships']
+        return {name: relationships}
 
     def to_pandas(self) -> tuple[pd.DataFrame, pd.DataFrame]:
         nodes, edges = [], []

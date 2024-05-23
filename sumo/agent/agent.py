@@ -18,7 +18,7 @@ class AgentState(TypedDict):
     ontology: Ontology
     kg: Graph
     tool_calls: list[dict]
-    explorations: list[str]
+    explorations: dict[str, list[str]]
     generation: str
 
 
@@ -54,7 +54,7 @@ def generate_kg_node(state: AgentState) -> AgentState:
     kg = state["kg"]
     explorations = state["explorations"]
 
-    llm = generate_kg_llm()
+    llm = generate_kg_llm(kg)
     output = llm.invoke(
         {
             "query": query,
@@ -66,10 +66,10 @@ def generate_kg_node(state: AgentState) -> AgentState:
 
     if isinstance(output, Graph):
         kg.merge_edges(output)
-        logger.info(f"Query: {query}\nGenerated KG: {output}\n")
+        logger.info(f"Generated KG: {output}\n")
         return AgentState(kg=kg, generation=_TEMPLATE_GENERATION, tool_calls=[])
 
-    logger.info(f"Query: {query}\nTool calling: {output.tool_calls}")
+    logger.info(f"Tool calling: {output.tool_calls}\n")
     return AgentState(tool_calls=output.tool_calls)
 
 
@@ -80,7 +80,7 @@ def direct_llm_node(state: AgentState) -> AgentState:
     llm = direct_llm()
     generation = llm.invoke({"query": query})
 
-    logger.info(f"Query: {query}\nAnswer: {generation}\n")
+    logger.info(f"Generated answer: {generation}\n")
     return AgentState(generation=generation)
 
 
@@ -88,11 +88,11 @@ def explore_kg_tool_node(state: AgentState) -> AgentState:
     tool_calls = state["tool_calls"]
     kg = state["kg"]
 
-    explorations = []
+    explorations = {}
     explore_kg_tool = get_explore_kg_tool(kg)
     for call in tool_calls:
         result = explore_kg_tool.invoke(call["args"])
-        explorations.append(result)
+        explorations.update(result)
 
     return AgentState(tool_calls=[], explorations=explorations)
 
@@ -142,7 +142,7 @@ class LlmAgent:
         queries = text_splitter.split_text(query)
 
         for i, q in enumerate(queries):
-            logger.info(f"Executing agent for query {i+1}/{len(queries)}")
+            logger.info(f"Agent execution for query {i+1}/{len(queries)}")
             state = self.graph.invoke(
                 {
                     "query": q,

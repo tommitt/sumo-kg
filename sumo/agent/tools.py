@@ -12,7 +12,7 @@ class ExploreKgTool:
     def __init__(self, kg: Graph) -> None:
         self._kg = kg
 
-    def run(self, name: str) -> str:
+    def run(self, name: str) -> dict:
         return self._kg.get_node_relationships(name)
 
 

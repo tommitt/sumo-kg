@@ -16,6 +16,7 @@ from sumo.agent.prompts import (
     GRAPH_FORMAT_INSTRUCTIONS,
     ROUTER_SYSTEM_PROMPT,
 )
+from sumo.agent.tools import get_explore_kg_tool
 from sumo.schemas import Graph
 from sumo.settings import config
 
@@ -70,7 +71,7 @@ class GraphOutputParser(PydanticOutputParser):
         return super().parse_result(result)
 
 
-def generate_kg_llm() -> RunnableSerializable:
+def generate_kg_llm(kg: Graph) -> RunnableSerializable:
     llm = get_llm()
     parser = GraphOutputParser(pydantic_object=Graph)
     prompt = ChatPromptTemplate.from_messages(
@@ -79,7 +80,8 @@ def generate_kg_llm() -> RunnableSerializable:
             ("human", "{query}"),
         ]
     ).partial(format_instructions=parser.get_format_instructions())
-    return prompt | llm | parser
+    llm_with_tools = llm.bind_tools([get_explore_kg_tool(kg)]) if kg.edges else llm
+    return prompt | llm_with_tools | parser
 
 
 # Direct LLM
