@@ -5,7 +5,13 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
 
-from sumo.agent.llms import direct_llm, generate_kg_llm, router_llm
+from sumo.agent.llms import (
+    CustomOutput,
+    direct_llm,
+    generate_kg_llm,
+    investigate_kg_llm,
+    router_llm,
+)
 from sumo.agent.tools import get_explore_kg_tool
 from sumo.schemas import Graph, Ontology
 from sumo.settings import config
@@ -18,11 +24,14 @@ class AgentState(TypedDict):
     ontology: Ontology
     kg: Graph
     tool_calls: list[dict]
+    sender: Literal["generate_kg", "investigate_kg"]
     explorations: dict[str, list[str]]
     generation: str
 
 
-def input_router_edge(state: AgentState) -> Literal["generate_kg", "direct_llm"]:
+def input_router_edge(
+    state: AgentState,
+) -> Literal["generate_kg", "investigate_kg", "direct_llm"]:
     logger.info("---ROUTER---")
     query = state["query"]
 
@@ -31,7 +40,7 @@ def input_router_edge(state: AgentState) -> Literal["generate_kg", "direct_llm"]
     source = out["source"]
 
     logger.info(f"Routing to {source}\n")
-    if source in ["generate_kg", "direct_llm"]:
+    if source in ["generate_kg", "investigate_kg", "direct_llm"]:
         return source
     else:
         raise Exception(f"Router source {source} is not supported")
@@ -55,7 +64,7 @@ def generate_kg_node(state: AgentState) -> AgentState:
     explorations = state["explorations"]
 
     llm = generate_kg_llm(kg)
-    output = llm.invoke(
+    output: CustomOutput = llm.invoke(
         {
             "query": query,
             "ontology": str(ontology.dump()),
@@ -64,13 +73,32 @@ def generate_kg_node(state: AgentState) -> AgentState:
         }
     )
 
-    if isinstance(output, Graph):
-        kg.merge_edges(output)
-        logger.info(f"Generated KG: {output}\n")
-        return AgentState(kg=kg, generation=_TEMPLATE_GENERATION, tool_calls=[])
+    if output.type == "tool":
+        logger.info(f"Tool calling: {output.tool_calls}\n")
+        return AgentState(tool_calls=output.tool_calls, sender="generate_kg")
 
-    logger.info(f"Tool calling: {output.tool_calls}\n")
-    return AgentState(tool_calls=output.tool_calls)
+    kg.merge_edges(output.pydantic_object)
+    logger.info(f"Generated KG: {output.pydantic_object}\n")
+    return AgentState(kg=kg, generation=_TEMPLATE_GENERATION, tool_calls=[])
+
+
+def investigate_kg_node(state: AgentState) -> AgentState:
+    logger.info("---INVESTIGATE KG---")
+    query = state["query"]
+    kg = state["kg"]
+    explorations = state["explorations"]
+
+    llm = investigate_kg_llm(kg)
+    output: CustomOutput = llm.invoke(
+        {"query": query, "nodes": kg.get_nodes_list(), "explorations": explorations}
+    )
+
+    if output.type == "tool":
+        logger.info(f"Tool calling: {output.tool_calls}\n")
+        return AgentState(tool_calls=output.tool_calls, sender="investigate_kg")
+
+    logger.info(f"Generated answer: {output.str_generation}\n")
+    return AgentState(generation=output.str_generation, tool_calls=[])
 
 
 def direct_llm_node(state: AgentState) -> AgentState:
@@ -112,6 +140,7 @@ class LlmAgent:
 
         # nodes
         graph.add_node("generate_kg", generate_kg_node)
+        graph.add_node("investigate_kg", investigate_kg_node)
         graph.add_node("direct_llm", direct_llm_node)
         graph.add_node("explore_kg_tool", explore_kg_tool_node)
 
@@ -120,6 +149,7 @@ class LlmAgent:
             input_router_edge,
             {
                 "generate_kg": "generate_kg",
+                "investigate_kg": "investigate_kg",
                 "direct_llm": "direct_llm",
             },
         )
@@ -128,7 +158,16 @@ class LlmAgent:
             tool_router_edge,
             {"call_tool": "explore_kg_tool", "__end__": END},
         )
-        graph.add_edge("explore_kg_tool", "generate_kg")
+        graph.add_conditional_edges(
+            "investigate_kg",
+            tool_router_edge,
+            {"call_tool": "explore_kg_tool", "__end__": END},
+        )
+        graph.add_conditional_edges(
+            "explore_kg_tool",
+            lambda state: state["sender"],
+            {"generate_kg": "generate_kg", "investigate_kg": "investigate_kg"},
+        )
         graph.add_edge("direct_llm", END)
 
         return graph.compile()
