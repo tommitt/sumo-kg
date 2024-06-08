@@ -1,4 +1,5 @@
 import logging
+import pickle
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -42,24 +43,15 @@ def st_modifiable_list(name: str, options: list) -> None:
     )
 
 
-def st_chat_containers(
-    subtitle_left: str, subtitle_right: str, height: int, html: str | None = None
-) -> tuple:
-    col_left, col_right = st.columns(2)
+def load_kg():
+    upload = st.session_state["uploaded_file"]
+    if upload:
+        st.session_state["graph"] = pickle.loads(upload.read())
 
-    with col_left:
-        st.subheader(subtitle_left)
-        container_left = st.container(height=height)
-        chat_input = st.chat_input()
 
-    with col_right:
-        st.subheader(subtitle_right)
-        container_right = st.container(height=height)
-        if html:
-            st.download_button("Download HTML", html, "graph.html")
-
-    return container_left, container_right, chat_input
-
+_CONTAINER_HEIGHT = 450
+kg: Graph = st.session_state["graph"]
+kg_html = kg.to_html()
 
 st.title("Sumo Knowledge Graph")
 
@@ -68,13 +60,24 @@ with st.sidebar:
     st_modifiable_list("Labels", st.session_state["ontology_labels"])
     st_modifiable_list("Relationships", st.session_state["ontology_relationships"])
 
-_CONTAINER_HEIGHT = 450
-kg_html = st.session_state["graph"].to_html()
-left, right, user_query = st_chat_containers(
-    "Chat interface", "Graph display", _CONTAINER_HEIGHT, kg_html
-)
+col_left, col_right = st.columns(2)
 
-with left:
+with col_left:
+    st.subheader("Chat interface")
+    left_container = st.container(height=_CONTAINER_HEIGHT)
+    user_query = st.chat_input()
+
+with col_right:
+    st.subheader("Graph display")
+    right_container = st.container(height=_CONTAINER_HEIGHT)
+    col1, col2 = st.columns(2)
+    col1.download_button("Download HTML", kg_html, "graph.html", disabled=(not kg_html))
+    col2.download_button(
+        "Download KG", pickle.dumps(kg), "graph.pkl", disabled=(not kg.edges)
+    )
+    _ = st.file_uploader("Import KG", on_change=load_kg, key="uploaded_file")
+
+with left_container:
     for message in st.session_state["messages"]:
         st.chat_message(message[0]).markdown(message[1])
 
@@ -87,7 +90,7 @@ with left:
                     labels=st.session_state["ontology_labels"],
                     relationships=st.session_state["ontology_relationships"],
                 ),
-                kg=st.session_state["graph"],
+                kg=kg,
             )
             agent_state = agent.run(user_query)
 
@@ -100,5 +103,5 @@ with left:
 
             st.rerun()
 
-with right:
+with right_container:
     components.html(kg_html, height=_CONTAINER_HEIGHT - 30)
